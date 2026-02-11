@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String
+  name         String
+  refreshToken String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  recipes Recipe[]
+  groups  Group[]
+
+  @@map("users")
+}
+
+model Recipe {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  ingredients Ingredient[]
+  steps       Step[]
+  groups      RecipeGroup[]
+
+  @@unique([userId, title])
+  @@index([userId])
+  @@index([title])
+  @@map("recipes")
+}
+
+model Ingredient {
+  id       String  @id @default(uuid())
+  name     String
+  quantity String
+  unit     String?
+  order    Int     @default(0)
+
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@map("ingredients")
+}
+
+model Step {
+  id          String @id @default(uuid())
+  description String
+  order       Int
+
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@map("steps")
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  recipes RecipeGroup[]
+
+  @@unique([userId, name])
+  @@map("groups")
+}
+
+model RecipeGroup {
+  recipeId String
+  groupId  String
+  addedAt  DateTime @default(now())
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, groupId])
+  @@map("recipe_groups")
+}
