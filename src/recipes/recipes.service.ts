@@ -1,5 +1,6 @@
 import {
   Injectable,
+  BadRequestException,
   ConflictException,
   NotFoundException,
   ForbiddenException,
@@ -45,6 +46,12 @@ export class RecipesService {
           throw new ConflictException(
             'You already have a recipe with this title',
           );
+        }
+        if (error.code === 'P2025') {
+          throw new NotFoundException('Record not found');
+        }
+        if (error.code === 'P2003') {
+          throw new BadRequestException('Foreign key constraint failed');
         }
       }
       throw error;
@@ -129,6 +136,12 @@ export class RecipesService {
           throw new ConflictException(
             'You already have a recipe with this title',
           );
+        }
+        if (error.code === 'P2025') {
+          throw new NotFoundException('Record not found');
+        }
+        if (error.code === 'P2003') {
+          throw new BadRequestException('Foreign key constraint failed');
         }
       }
       throw error;

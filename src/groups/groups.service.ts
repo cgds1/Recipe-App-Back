@@ -1,5 +1,6 @@
 import {
   Injectable,
+  BadRequestException,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
@@ -26,6 +27,12 @@ export class GroupsService {
           throw new ConflictException(
             'You already have a group with this name',
           );
+        }
+        if (error.code === 'P2025') {
+          throw new NotFoundException('Record not found');
+        }
+        if (error.code === 'P2003') {
+          throw new BadRequestException('Foreign key constraint failed');
         }
       }
       throw error;
@@ -91,6 +98,12 @@ export class GroupsService {
           throw new ConflictException(
             'You already have a group with this name',
           );
+        }
+        if (error.code === 'P2025') {
+          throw new NotFoundException('Record not found');
+        }
+        if (error.code === 'P2003') {
+          throw new BadRequestException('Foreign key constraint failed');
         }
       }
       throw error;
