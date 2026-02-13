@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
+import { createHash } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -84,7 +85,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const tokenValid = await bcrypt.compare(refreshToken, user.refreshToken);
+    const tokenValid = await bcrypt.compare(this.hashToken(refreshToken), user.refreshToken);
     if (!tokenValid) {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -116,8 +117,12 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
   private async updateRefreshToken(userId: string, refreshToken: string) {
-    const hashedToken = await bcrypt.hash(refreshToken, 10);
+    const hashedToken = await bcrypt.hash(this.hashToken(refreshToken), 10);
     await this.prisma.user.update({
       where: { id: userId },
       data: { refreshToken: hashedToken },

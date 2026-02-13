@@ -34,6 +34,9 @@ Thumbs.db
 .env.test.local
 .env.production.local
 
+# Test scripts
+/scripts/testing/
+
 # Logs
 logs
 *.log
