@@ -88,6 +88,7 @@ export class RecipesController {
   }
 
   @Post(':id/groups')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Associate recipe to groups' })
   @ApiResponse({ status: 200, description: 'Recipe associated to groups' })
   addToGroups(
