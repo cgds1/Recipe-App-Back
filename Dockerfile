@@ -50,8 +50,11 @@ COPY package.json ./
 COPY --from=build /app/node_modules/prisma ./node_modules/prisma/
 COPY --from=build /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 
+# Copy Prisma config (required by Prisma 7 for datasource URL at runtime)
+COPY prisma.config.ts ./
+
 USER appuser
 
 EXPOSE ${PORT:-3000}
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main"]
