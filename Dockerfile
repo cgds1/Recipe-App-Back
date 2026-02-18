@@ -46,6 +46,10 @@ COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
 # Copy package.json (needed for scripts)
 COPY package.json ./
 
+# Copy Prisma CLI for migrations (devDependency not included in prod deps)
+COPY --from=build /app/node_modules/prisma ./node_modules/prisma/
+COPY --from=build /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+
 USER appuser
 
 EXPOSE ${PORT:-3000}

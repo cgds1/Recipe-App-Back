@@ -70,18 +70,9 @@ export class GroupsController {
   }
 
   @Delete(':id')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Delete group and all associated recipes' })
-  @ApiResponse({
-    status: 200,
-    description: 'Group and recipes deleted',
-    schema: {
-      type: 'object',
-      properties: {
-        deletedRecipes: { type: 'number', example: 5 },
-      },
-    },
-  })
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete group (recipes are preserved)' })
+  @ApiResponse({ status: 204, description: 'Group deleted successfully' })
   @ApiResponse({ status: 404, description: 'Group not found' })
   remove(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     return this.groupsService.remove(id, user.id);
