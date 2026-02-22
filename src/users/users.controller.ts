@@ -2,6 +2,7 @@ import { Controller, Get, Patch, Delete, Body, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Users')
@@ -23,6 +24,14 @@ export class UsersController {
   @ApiResponse({ status: 409, description: 'Email already in use' })
   updateProfile(@CurrentUser() user: { id: string }, @Body() dto: UpdateUserDto) {
     return this.usersService.updateProfile(user.id, dto);
+  }
+
+  @Patch('me/password')
+  @ApiOperation({ summary: 'Change current user password' })
+  @ApiResponse({ status: 200, description: 'Password updated successfully' })
+  @ApiResponse({ status: 401, description: 'Current password is incorrect' })
+  changePassword(@CurrentUser() user: { id: string }, @Body() dto: ChangePasswordDto) {
+    return this.usersService.changePassword(user.id, dto);
   }
 
   @Delete('me')
