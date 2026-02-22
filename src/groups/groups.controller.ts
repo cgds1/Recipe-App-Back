@@ -69,10 +69,21 @@ export class GroupsController {
     return this.groupsService.update(id, user.id, dto);
   }
 
+  @Get(':id/confirm-delete')
+  @ApiOperation({ summary: 'Preview recipes that will be deleted with the group' })
+  @ApiResponse({ status: 200, description: 'List of recipes that will be deleted' })
+  @ApiResponse({ status: 404, description: 'Group not found' })
+  confirmDelete(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.groupsService.findRecipesToDelete(id, user.id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
-  @ApiOperation({ summary: 'Delete group (recipes are preserved)' })
-  @ApiResponse({ status: 204, description: 'Group deleted successfully' })
+  @ApiOperation({ summary: 'Delete group and all its associated recipes' })
+  @ApiResponse({ status: 204, description: 'Group and recipes deleted successfully' })
   @ApiResponse({ status: 404, description: 'Group not found' })
   remove(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     return this.groupsService.remove(id, user.id);

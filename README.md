@@ -1,795 +1,279 @@
-# Recipe Management App
+# Recipe App — Backend API
 
-> Full-stack mobile application for creating, organizing, and discovering culinary recipes with authentication and group organization.
+API REST para la gestión de recetas de cocina. Permite a los usuarios registrarse, crear recetas con ingredientes y pasos, y organizarlas en grupos personalizados.
 
-## Quick Start
+**Materia:** Moviles 2026C — Profesor Mario González
+**Integrantes:** Carlos Díaz · Alberto Martínez
+**Despliegue:** Railway (Docker)
+**Documentación interactiva:** `/docs` (Swagger)
+
+---
+
+## Inicio Rápido
 
 ```bash
-# 1. Start PostgreSQL with Docker (REQUIRED - Phase 1)
-docker-compose up -d
+# 1. Clonar el repositorio
+git clone https://github.com/cgds1/Recipe-App-Back.git
+cd Recipe-App-Back
 
-# 2. Install dependencies and setup database (Phase 2)
+# 2. Instalar dependencias
 npm install
-npx prisma generate
-npx prisma migrate dev
 
-# 3. Start backend API (Phase 3-5)
-npm run start:dev
+# 3. Configurar variables de entorno
+# Crear archivo .env con las variables indicadas abajo
 
-# 4. Access API documentation
-# → http://localhost:3000/api
-```
-
-**Prerequisites:**
-- Docker & Docker Compose installed
-- Node.js 18+ and npm
-- Expo CLI (for mobile development in Phase 6+)
-
----
-
-## Overview
-
-Cross-platform mobile application built with **React Native (Expo)** and a **NestJS REST API** backend, allowing users to manage personal recipe collections, organize them into custom groups, and explore recipes shared by other users.
-
-### Key Features
-
-- **User Authentication** — Secure registration and login with JWT tokens and refresh token rotation
-- **Personal Recipe Management** — Create, edit, and delete recipes with ingredients and step-by-step instructions
-- **Recipe Discovery** — Browse recipes from all users in alphabetical order
-- **Group Organization** — Organize recipes into multiple custom groups
-- **Multi-group Associations** — Single recipes can belong to multiple groups simultaneously
-- **Smart Deletion** — Group deletion removes associated recipes with confirmation dialog
-
----
-
-## Project Phases
-
-This project follows a structured development approach across multiple phases:
-
-### Phase 1: Environment Setup & Database
-- **Docker setup** for PostgreSQL database (port 5433)
-- Database configuration and connection testing
-- Prisma ORM setup with initial schema
-- Environment variables configuration (`.env` files)
-
-**Deliverables:** Working PostgreSQL container, Prisma client generated
-
-### Phase 2: Backend API Foundation (NestJS)
-- NestJS project initialization with TypeScript
-- Project structure setup (modules, controllers, services)
-- Prisma service integration
-- Global exception handling and validation pipes
-- Swagger/OpenAPI documentation setup
-
-**Deliverables:** REST API server running on port 3000, `/api` documentation accessible
-
-### Phase 3: User Authentication
-- User model and registration endpoint (`POST /auth/register`)
-- Login with JWT access + refresh tokens (`POST /auth/login`)
-- Password validation and bcrypt hashing
-- JWT strategy with Passport.js
-- Token refresh endpoint (`POST /auth/refresh`)
-- Logout functionality with token invalidation
-- Rate limiting on auth endpoints (10 req/min)
-
-**Deliverables:** Complete authentication flow, protected endpoints working
-
-### Phase 4: Recipe Management (CRUD)
-- Recipe model with ingredients and steps (nested DTOs)
-- Recipe CRUD endpoints with authorization checks
-- Alphabetical sorting implementation
-- Unique title validation per user (`@@unique([userId, title])`)
-- Recipe discovery endpoint (all users' recipes)
-- Author-only edit/delete validation (403 forbidden)
-
-**Deliverables:** Full recipe CRUD with nested data, alphabetical listing
-
-### Phase 5: Group Management & Relationships
-- Group model with many-to-many relationship to recipes
-- Group CRUD endpoints
-- Recipe-Group association endpoints (`POST /recipes/:id/groups`)
-- Recipe removal from group (unlink only)
-- **Critical:** Group deletion with cascade recipe deletion
-- Group listing with recipe counts
-
-**Deliverables:** Group system working, cascade deletion tested
-
-### Phase 6: Mobile Frontend (React Native + Expo)
-- Expo project initialization with TypeScript
-- React Navigation setup (stack, tabs, drawer)
-- Zustand stores for authentication state
-- Axios client with JWT interceptor
-- Token storage via `expo-secure-store`
-- UI components library (forms, buttons, cards)
-
-**Deliverables:** Mobile app running on simulator/device, API connection established
-
-### Phase 7: Frontend Features Implementation
-- Authentication screens (login, register)
-- Recipe screens (list, detail, create, edit)
-- Group screens (list, detail, create, edit)
-- Multi-group selection UI for recipes
-- Confirmation dialogs for destructive actions
-- Error handling and loading states
-
-**Deliverables:** Complete mobile app with all features functional
-
-### Phase 8: Testing & Documentation
-- Backend unit tests (services)
-- E2E tests for critical flows
-- Mobile UI testing
-- API documentation validation
-- README and deployment instructions
-
-**Deliverables:** Test suite passing, documentation complete
-
----
-
-## Business Requirements
-
-### 1. Recipe Uniqueness Per User
-
-- Each user can create recipes with **unique titles within their own collection**
-- Different users **can** have recipes with the same title
-- Attempting to create a duplicate title returns a `409 Conflict` error
-- Implemented via compound unique constraint: `@@unique([userId, title])`
-
-### 2. Alphabetical Sorting
-
-- All recipe listings display in **alphabetical order by title**
-- Applies to both "My Recipes" (personal) and "Explore" (all users) views
-- Sorting handled at database query level, not in-memory
-
-### 3. Group Deletion Behavior
-
-**CRITICAL BUSINESS RULE:**
-
-When a group is deleted, **all recipes associated with that group are permanently deleted from the database**, even if they belong to other groups.
-
-**Example Scenario:**
-```
-Recipe "Chocolate Cake" belongs to:
-  - Group "Desserts"
-  - Group "Birthday Recipes"
-
-User deletes "Desserts" group:
-  → Recipe "Chocolate Cake" is PERMANENTLY DELETED
-  → It also disappears from "Birthday Recipes"
-  → Database record is removed (hard delete)
-```
-
-**Implementation Details:**
-- Frontend **must** show confirmation dialog before deletion:
-  ```
-  "Deleting this group will permanently delete X recipes.
-   This includes recipes that belong to other groups.
-   This action cannot be undone. Continue?"
-  ```
-- Backend returns count of deleted recipes: `{ deletedRecipes: number }`
-- Database uses cascade deletion: `onDelete: Cascade` on `RecipeGroup.group` relation
-
-**Rationale:** Groups represent "ownership" of recipes. When the group is deleted, the recipe lifecycle ends, regardless of other associations.
-
-### 4. Recipe Removal from Group (Non-Destructive)
-
-**Contrast with group deletion:**
-
-- Removing a recipe from a group **only removes the association** (soft unlink)
-- The recipe itself continues to exist and remains in other groups
-- Endpoint: `DELETE /recipes/:id/groups/:groupId`
-- No confirmation dialog needed (non-destructive operation)
-
-### 5. Multi-group Support
-
-- A single recipe can be associated with **multiple groups**
-- Managed via many-to-many relationship with `RecipeGroup` pivot table
-- Group selector in UI allows selecting multiple groups when creating/editing recipes
-
-### 6. Authorization Rules
-
-- Users can only edit/delete **their own recipes**
-- Users can only manage **their own groups**
-- All users can view all recipes (discovery feature)
-- Attempting to modify another user's resource returns `403 Forbidden`
-
----
-
-## Technical Architecture
-
-### System Overview
-
-```
-┌─────────────────┐          ┌─────────────────┐          ┌──────────────┐
-│                 │          │                 │          │              │
-│  React Native   │  HTTP    │   NestJS API    │   SQL    │  PostgreSQL  │
-│  (Expo)         │ ◄──────► │   (REST)        │ ◄──────► │              │
-│                 │   JWT    │                 │          │              │
-└─────────────────┘          └─────────────────┘          └──────────────┘
-```
-
-### Communication Protocol
-
-- **REST API** with JSON payloads
-- Standard HTTP verbs (GET, POST, PATCH, DELETE)
-- Semantic HTTP status codes (200, 201, 204, 400, 401, 403, 404, 409, 500)
-- JWT Bearer token authentication in `Authorization` header
-
-### Authentication Flow
-
-```
-┌──────────┐                                    ┌──────────┐
-│          │  1. POST /auth/register             │          │
-│          │     { email, password, name }       │          │
-│          ├────────────────────────────────────►│          │
-│          │                                     │          │
-│          │  2. { accessToken, refreshToken }   │  NestJS  │
-│  Mobile  │◄────────────────────────────────────┤  API     │
-│  App     │                                     │          │
-│          │  3. Subsequent requests             │          │
-│          │     Header: Bearer <accessToken>    │          │
-│          ├────────────────────────────────────►│          │
-│          │                                     │          │
-│          │  4. Token expired (401)             │          │
-│          │◄────────────────────────────────────┤          │
-│          │                                     │          │
-│          │  5. POST /auth/refresh              │          │
-│          │     { refreshToken }                │          │
-│          ├────────────────────────────────────►│          │
-│          │                                     │          │
-│          │  6. New tokens                      │          │
-│          │◄────────────────────────────────────┤          │
-└──────────┘                                    └──────────┘
-```
-
-**Token Configuration:**
-
-- **Access Token:** 15 minutes expiration
-- **Refresh Token:** 7 days expiration, stored hashed in database
-- Token rotation on refresh (old refresh token invalidated)
-- Mobile storage via `expo-secure-store` for security
-
----
-
-## Technology Stack
-
-### Mobile Frontend
-
-| Technology           | Version | Purpose                           |
-| -------------------- | ------- | --------------------------------- |
-| **React Native**     | 0.76+   | Cross-platform mobile framework   |
-| **Expo**             | SDK 52+ | Managed workflow, EAS builds      |
-| **TypeScript**       | 5.x     | Type safety                       |
-| **React Navigation** | 7.x     | Stack, tabs, drawer navigation    |
-| **Zustand**          | 5.x     | Lightweight global state          |
-| **React Query**      | 5.x     | Server state management, caching  |
-| **React Hook Form**  | 7.x     | Performant forms                  |
-| **Zod**              | 3.x     | Schema validation                 |
-| **Axios**            | 1.x     | HTTP client with JWT interceptors |
-
-### Backend API
-
-| Technology            | Version | Purpose                                |
-| --------------------- | ------- | -------------------------------------- |
-| **NestJS**            | 11.x    | Node.js framework with DI, decorators  |
-| **TypeScript**        | 5.x     | Type safety                            |
-| **Prisma ORM**        | 6.x     | Type-safe database access              |
-| **PostgreSQL**        | 16+     | Relational database                    |
-| **Passport.js**       | —       | JWT authentication                     |
-| **bcrypt**            | 5.x     | Password hashing                       |
-| **class-validator**   | 0.14+   | DTO validation                         |
-| **@nestjs/swagger**   | 8.x     | API documentation (OpenAPI)            |
-| **@nestjs/throttler** | —       | Rate limiting (brute-force protection) |
-
----
-
-## Data Model
-
-### Entity Relationship Diagram
-
-```
-┌─────────────┐
-│    User     │
-│─────────────│
-│ id          │──┐
-│ email       │  │
-│ password    │  │ 1:N
-│ name        │  │
-│ refreshToken│  │
-└─────────────┘  │
-                 │
-                 ├────────────┐
-                 │            │
-                 ▼            ▼
-         ┌─────────────┐  ┌─────────────┐
-         │   Recipe    │  │    Group    │
-         │─────────────│  │─────────────│
-         │ id          │  │ id          │
-         │ title       │  │ name        │
-         │ description │  │ description │
-         │ userId      │  │ userId      │
-         └─────────────┘  └─────────────┘
-                 │               │
-                 │    M:N        │
-                 └───────┬───────┘
-                         │
-                         ▼
-                 ┌───────────────┐
-                 │  RecipeGroup  │
-                 │───────────────│
-                 │ recipeId (FK) │
-                 │ groupId (FK)  │
-                 │ addedAt       │
-                 └───────────────┘
-                         ▲
-                         │ 1:N
-         ┌───────────────┴──────────────┐
-         │                              │
-         ▼                              ▼
-┌──────────────┐              ┌──────────────┐
-│  Ingredient  │              │     Step     │
-│──────────────│              │──────────────│
-│ id           │              │ id           │
-│ name         │              │ description  │
-│ quantity     │              │ order        │
-│ unit         │              │ recipeId     │
-│ order        │              └──────────────┘
-│ recipeId     │
-└──────────────┘
-```
-
-### Prisma Schema
-
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  password     String   // bcrypt hashed
-  name         String
-  refreshToken String?  // bcrypt hashed
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  recipes Recipe[]
-  groups  Group[]
-
-  @@map("users")
-}
-
-model Recipe {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  ingredients Ingredient[]
-  steps       Step[]
-  groups      RecipeGroup[]
-
-  @@unique([userId, title]) // Title unique per user, not globally
-  @@index([userId])
-  @@index([title])
-  @@map("recipes")
-}
-
-model Ingredient {
-  id       String  @id @default(uuid())
-  name     String
-  quantity String
-  unit     String?
-  order    Int     @default(0)
-
-  recipeId String
-  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-
-  @@map("ingredients")
-}
-
-model Step {
-  id          String @id @default(uuid())
-  description String
-  order       Int
-
-  recipeId String
-  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-
-  @@map("steps")
-}
-
-model Group {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  recipes RecipeGroup[]
-
-  @@unique([userId, name]) // Group name unique per user
-  @@map("groups")
-}
-
-model RecipeGroup {
-  recipeId String
-  groupId  String
-  addedAt  DateTime @default(now())
-
-  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  // ⚠️ When group is deleted → all RecipeGroup entries deleted → triggers recipe deletion
-
-  @@id([recipeId, groupId])
-  @@map("recipe_groups")
-}
-```
-
-### Key Constraints
-
-- **User.email** — Unique globally
-- **Recipe.title** — Unique per user (compound: `[userId, title]`)
-- **Group.name** — Unique per user (compound: `[userId, name]`)
-- **Cascade Deletion Hierarchy:**
-  - Deleting a **User** → cascades to all recipes, groups, ingredients, steps
-  - Deleting a **Group** → cascades to RecipeGroup entries → **triggers recipe deletion** (even if recipe is in other groups)
-  - Deleting a **Recipe** → cascades to ingredients, steps, RecipeGroup entries
-- **Pivot Table** — RecipeGroup manages many-to-many relationship with cascade behavior
-
----
-
-## API Endpoints
-
-### Authentication
-
-| Method | Endpoint         | Description          | Auth | Request                     | Response                                  |
-| ------ | ---------------- | -------------------- | ---- | --------------------------- | ----------------------------------------- |
-| POST   | `/auth/register` | Register new user    | No   | `{ email, password, name }` | 201 `{ accessToken, refreshToken, user }` |
-| POST   | `/auth/login`    | User login           | No   | `{ email, password }`       | 200 `{ accessToken, refreshToken, user }` |
-| POST   | `/auth/refresh`  | Refresh access token | No   | `{ refreshToken }`          | 200 `{ accessToken, refreshToken }`       |
-| POST   | `/auth/logout`   | User logout          | Yes  | —                           | 204                                       |
-
-**Password Requirements:**
-
-- Minimum 8 characters
-- At least 1 uppercase letter
-- At least 1 lowercase letter
-- At least 1 number
-
-### Users
-
-| Method | Endpoint    | Description                | Auth | Request             | Response                             |
-| ------ | ----------- | -------------------------- | ---- | ------------------- | ------------------------------------ |
-| GET    | `/users/me` | Get current user profile   | Yes  | —                   | 200 `{ id, email, name, createdAt }` |
-| PATCH  | `/users/me` | Update profile             | Yes  | `{ name?, email? }` | 200 `{ user }`                       |
-| DELETE | `/users/me` | Delete account permanently | Yes  | —                   | 204                                  |
-
-### Recipes
-
-| Method | Endpoint                       | Description                            | Auth | Request                                                        | Response                         |
-| ------ | ------------------------------ | -------------------------------------- | ---- | -------------------------------------------------------------- | -------------------------------- |
-| GET    | `/recipes`                     | All recipes (alphabetically)           | Yes  | —                                                              | 200 `[{ id, title, user, ... }]` |
-| GET    | `/recipes/mine`                | My recipes (alphabetically)            | Yes  | —                                                              | 200 `[{ id, title, ... }]`       |
-| GET    | `/recipes/:id`                 | Recipe detail with ingredients & steps | Yes  | —                                                              | 200 `{ recipe }`                 |
-| POST   | `/recipes`                     | Create recipe                          | Yes  | `{ title, description?, ingredients[], steps[], groupIds?[] }` | 201 `{ recipe }`                 |
-| PATCH  | `/recipes/:id`                 | Update recipe (author only)            | Yes  | `{ title?, description?, ingredients?[], steps?[] }`           | 200 `{ recipe }`                 |
-| DELETE | `/recipes/:id`                 | Delete recipe (author only)            | Yes  | —                                                              | 204                              |
-| POST   | `/recipes/:id/groups`          | Associate recipe to groups             | Yes  | `{ groupIds[] }`                                               | 200 `{ recipe }`                 |
-| DELETE | `/recipes/:id/groups/:groupId` | Remove from group (unlink only)        | Yes  | —                                                              | 204                              |
-
-**Recipe Creation Example:**
-
-```json
-{
-  "title": "Chocolate Cake",
-  "description": "Delicious homemade cake",
-  "ingredients": [
-    { "name": "Flour", "quantity": "500", "unit": "grams", "order": 1 },
-    { "name": "Sugar", "quantity": "300", "unit": "grams", "order": 2 }
-  ],
-  "steps": [
-    { "description": "Mix dry ingredients", "order": 1 },
-    { "description": "Add wet ingredients", "order": 2 }
-  ],
-  "groupIds": ["uuid-group-1", "uuid-group-2"]
-}
-```
-
-### Groups
-
-| Method | Endpoint      | Description                  | Auth | Request                   | Response                          |
-| ------ | ------------- | ---------------------------- | ---- | ------------------------- | --------------------------------- |
-| GET    | `/groups`     | My groups with recipe counts | Yes  | —                         | 200 `[{ id, name, recipeCount }]` |
-| GET    | `/groups/:id` | Group detail with recipes    | Yes  | —                         | 200 `{ group, recipes[] }`        |
-| POST   | `/groups`     | Create group                 | Yes  | `{ name, description? }`  | 201 `{ group }`                   |
-| PATCH  | `/groups/:id` | Update group                 | Yes  | `{ name?, description? }` | 200 `{ group }`                   |
-| DELETE | `/groups/:id` | Delete group AND all associated recipes (cascade) | Yes  | —                         | 200 `{ deletedRecipes: number }`  |
-
-**Group Deletion Response Example:**
-
-```json
-{
-  "deletedRecipes": 5,
-  "message": "Group deleted successfully. 5 recipes were permanently deleted."
-}
-```
-
-**Warning:** This endpoint permanently deletes all recipes associated with the group, even if they belong to other groups. Frontend must show confirmation dialog before calling this endpoint.
-
----
-
-## HTTP Status Codes
-
-| Code    | Meaning               | Usage                                                         |
-| ------- | --------------------- | ------------------------------------------------------------- |
-| **200** | OK                    | Successful GET, PATCH, or special DELETE (with body)          |
-| **201** | Created               | Resource successfully created                                 |
-| **204** | No Content            | Successful deletion without response body                     |
-| **400** | Bad Request           | Validation failed (missing fields, invalid format)            |
-| **401** | Unauthorized          | Missing, invalid, or expired access token                     |
-| **403** | Forbidden             | Valid token but insufficient permissions (not resource owner) |
-| **404** | Not Found             | Resource does not exist                                       |
-| **409** | Conflict              | Unique constraint violation (duplicate title/email)           |
-| **429** | Too Many Requests     | Rate limit exceeded (10 requests/minute on auth endpoints)    |
-| **500** | Internal Server Error | Unexpected server error                                       |
-
----
-
-## Security Features
-
-### Authentication & Authorization
-
-- **JWT-based authentication** with access + refresh tokens
-- **Bcrypt password hashing** (cost factor 10)
-- **Refresh token rotation** on every refresh request
-- **Token storage:** Hashed in database, secure storage on mobile
-- **Rate limiting:** 10 requests/minute on login/register endpoints
-
-### Data Protection
-
-- **Passwords never returned** in API responses
-- **User-scoped resources** (recipes/groups filtered by userId)
-- **Authorization checks** on all mutation endpoints
-- **Input validation** via class-validator (backend) and Zod (frontend)
-- **SQL injection protection** via Prisma parameterized queries
-
-### Frontend Security
-
-```typescript
-// Secure token storage on mobile
-import * as SecureStore from 'expo-secure-store';
-
-export const authStorage = {
-  async saveToken(token: string) {
-    await SecureStore.setItemAsync('auth_token', token);
-  },
-  async getToken() {
-    return await SecureStore.getItemAsync('auth_token');
-  },
-  async clearToken() {
-    await SecureStore.deleteItemAsync('auth_token');
-  },
-};
-```
-
----
-
-## Project Structure
-
-### Backend (NestJS)
-
-```
-recipe-api/
-├── prisma/
-│   ├── schema.prisma
-│   └── migrations/
-├── src/
-│   ├── common/
-│   │   ├── decorators/         # @CurrentUser(), @Public()
-│   │   ├── filters/            # Global exception filter
-│   │   └── guards/             # JwtAuthGuard
-│   ├── auth/
-│   │   ├── dto/                # RegisterDto, LoginDto, RefreshTokenDto
-│   │   ├── strategies/         # JwtStrategy
-│   │   ├── auth.controller.ts
-│   │   ├── auth.service.ts
-│   │   └── auth.module.ts
-│   ├── users/
-│   │   ├── dto/                # UpdateUserDto
-│   │   ├── users.controller.ts
-│   │   ├── users.service.ts
-│   │   └── users.module.ts
-│   ├── recipes/
-│   │   ├── dto/                # CreateRecipeDto, UpdateRecipeDto
-│   │   ├── recipes.controller.ts
-│   │   ├── recipes.service.ts
-│   │   └── recipes.module.ts
-│   ├── groups/
-│   │   ├── dto/                # CreateGroupDto, UpdateGroupDto
-│   │   ├── groups.controller.ts
-│   │   ├── groups.service.ts
-│   │   └── groups.module.ts
-│   ├── prisma/
-│   │   ├── prisma.service.ts
-│   │   └── prisma.module.ts
-│   ├── app.module.ts
-│   └── main.ts
-└── .env
-```
-
-### Mobile App (React Native + Expo)
-
-```
-recipe-app/
-├── src/
-│   ├── app/                    # Expo Router (file-based routing)
-│   │   ├── (auth)/             # Auth screens (login, register)
-│   │   ├── (tabs)/             # Tab navigation (home, explore, groups, profile)
-│   │   ├── recipe/             # Recipe screens (detail, create, edit)
-│   │   └── group/              # Group screens (detail, create, edit)
-│   ├── components/
-│   │   ├── ui/                 # Reusable UI components
-│   │   ├── recipes/            # Recipe-specific components
-│   │   └── groups/             # Group-specific components
-│   ├── hooks/                  # Custom hooks (useAuth, useRecipes)
-│   ├── services/               # API services (Axios instances)
-│   ├── store/                  # Zustand stores
-│   ├── types/                  # TypeScript type definitions
-│   └── utils/                  # Helper functions
-├── assets/
-└── app.json
-```
-
----
-
-## API Documentation
-
-The API is fully documented with **Swagger/OpenAPI**. When the backend server is running:
-
-- **Swagger UI:** http://localhost:3000/api
-- **JSON Schema:** http://localhost:3000/api-json
-
-All endpoints, DTOs, and response schemas are documented with:
-
-- `@ApiTags` for grouping
-- `@ApiOperation` for endpoint descriptions
-- `@ApiResponse` for status codes and response examples
-- `@ApiProperty` for DTO field documentation
-- `@ApiBearerAuth` for protected endpoints
-
----
-
-## Development Commands
-
-### Prerequisites
-
-**ALWAYS start Docker first:**
-```bash
-# Start PostgreSQL container (run this BEFORE npm commands)
+# 4. Levantar la base de datos
 docker-compose up -d
 
-# Verify database is running
-docker ps
-```
+# 5. Ejecutar migraciones
+npx prisma migrate deploy
 
-### Backend
-
-```bash
-# Start development server (after Docker is running)
+# 6. Iniciar en modo desarrollo
 npm run start:dev
 
-# Build for production
-npm run build
-
-# Run tests
-npm run test
-
-# Prisma migrations
-npx prisma migrate dev --name migration_name
-npx prisma studio                 # Database GUI
-npx prisma migrate status         # Check migration status
+# 7. Acceder a la documentación
+# → http://localhost:3000/docs
 ```
 
-### Database
+**Requisitos:** Docker, Node.js 18+, npm
 
-```bash
-# Generate Prisma Client
-npx prisma generate
-
-# Reset database (development only)
-npx prisma migrate reset
-
-# View migration SQL
-npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script
-```
-
----
-
-## Database Setup (Docker)
-
-**IMPORTANT:** This project **requires Docker** for the PostgreSQL database. This is set up in **Phase 1** and must be running before starting the NestJS backend.
-
-The database is mapped to port **5433** (instead of default 5432) to avoid conflicts with local PostgreSQL installations.
-
-### Docker Compose Configuration
-
-**`docker-compose.yml`:**
-
-```yaml
-version: '3.8'
-
-services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: recipe-db
-    restart: always
-    ports:
-      - '5433:5432' # Mapped to 5433 to avoid conflicts
-    environment:
-      POSTGRES_USER: usuario
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: recipe_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
-```
-
-### Starting the Database
-
-```bash
-# Start PostgreSQL container
-docker-compose up -d
-
-# View logs
-docker-compose logs -f postgres
-
-# Stop container
-docker-compose down
-
-# Stop and remove data (reset database)
-docker-compose down -v
-```
-
-**Connection String:**
-
-```
-postgresql://usuario:password@localhost:5433/recipe_db?schema=public
-```
-
----
-
-## Environment Variables
-
-**Backend (`.env`):**
+### Variables de Entorno (`.env`)
 
 ```env
 DATABASE_URL="postgresql://usuario:password@localhost:5433/recipe_db?schema=public"
-JWT_SECRET="your-super-secret-key-change-in-production"
-```
-
-**Mobile (`.env`):**
-
-```env
-EXPO_PUBLIC_API_URL="http://localhost:3000"
+JWT_SECRET="clave-secreta-cambiar-en-produccion"
+PORT=3000
+CORS_ORIGIN=*
 ```
 
 ---
 
-## License
+## Stack Tecnológico
 
-This project is part of a mobile development course assignment.
+| Tecnología           | Rol                                     |
+| -------------------- | --------------------------------------- |
+| NestJS 11            | Framework backend                       |
+| TypeScript 5.7       | Lenguaje                                |
+| PostgreSQL 16        | Base de datos                           |
+| Prisma 7             | ORM y migraciones                       |
+| Passport + JWT       | Autenticación (access + refresh tokens) |
+| bcrypt               | Hashing de contraseñas y tokens         |
+| Swagger/OpenAPI      | Documentación interactiva en `/docs`    |
+| @nestjs/throttler    | Rate limiting                           |
+| class-validator      | Validación de DTOs                      |
+| Docker (multi-stage) | Contenedorización y despliegue          |
+
+---
+
+## Estructura del Proyecto
+
+```
+src/
+├── auth/                # Registro, login, refresh token, logout
+│   ├── dto/             # RegisterDto, LoginDto, RefreshTokenDto
+│   └── strategies/      # JwtStrategy (Passport)
+├── users/               # Perfil de usuario (ver, editar, eliminar cuenta)
+│   └── dto/             # UpdateUserDto
+├── recipes/             # CRUD de recetas con ingredientes y pasos
+│   └── dto/             # CreateRecipeDto, UpdateRecipeDto
+├── groups/              # CRUD de grupos con asociaciones a recetas
+│   └── dto/             # CreateGroupDto, UpdateGroupDto
+├── prisma/              # PrismaService global
+└── common/
+    ├── decorators/      # @Public(), @CurrentUser()
+    ├── filters/         # Filtro global de excepciones HTTP
+    └── guards/          # JwtAuthGuard (guard global)
+```
+
+---
+
+## Modelo de Datos
+
+```
+┌──────────┐        ┌──────────┐        ┌──────────┐
+│  users   │──1:N──>│ recipes  │<──N:M──│  groups  │
+└──────────┘        └──────────┘        └──────────┘
+                      │      │
+                     1:N    1:N
+                      │      │
+               ┌──────┘      └──────┐
+               v                    v
+         ┌────────────┐      ┌─────────┐
+         │ ingredients│      │  steps  │
+         └────────────┘      └─────────┘
+```
+
+**Restricciones clave:**
+
+- `email` — único global
+- `title` de receta — único por usuario (`@@unique([userId, title])`)
+- `name` de grupo — único por usuario (`@@unique([userId, name])`)
+
+**Reglas de eliminación en cascada:**
+
+- Eliminar **usuario** → elimina todas sus recetas, grupos, ingredientes y pasos
+- Eliminar **grupo** → elimina el grupo y todas las recetas asociadas a él
+- Eliminar **receta** → elimina sus ingredientes, pasos y asociaciones a grupos
+- Desasociar receta de grupo → solo se elimina la asociación, la receta se conserva
+
+---
+
+## Endpoints de la API
+
+### Autenticación (rutas públicas)
+
+| Método | Ruta             | Body                        | Descripción                                |
+| ------ | ---------------- | --------------------------- | ------------------------------------------ |
+| POST   | `/auth/register` | `{ email, password, name }` | Registro de usuario. Retorna tokens + user |
+| POST   | `/auth/login`    | `{ email, password }`       | Login. Retorna access y refresh token      |
+| POST   | `/auth/refresh`  | `{ refreshToken }`          | Rota ambos tokens                          |
+| POST   | `/auth/logout`   | —                           | Invalida el refresh token (requiere JWT)   |
+
+### Usuarios (requieren JWT)
+
+| Método | Ruta        | Body                | Descripción                              |
+| ------ | ----------- | ------------------- | ---------------------------------------- |
+| GET    | `/users/me` | —                   | Obtener perfil del usuario autenticado   |
+| PATCH  | `/users/me` | `{ name?, email? }` | Editar perfil. 409 si el email ya existe |
+| DELETE | `/users/me` | —                   | Eliminar cuenta y todos sus datos        |
+
+### Recetas (requieren JWT)
+
+| Método | Ruta                           | Body               | Descripción                                               |
+| ------ | ------------------------------ | ------------------ | --------------------------------------------------------- |
+| GET    | `/recipes`                     | —                  | Todas las recetas de todos los usuarios, orden alfabético |
+| GET    | `/recipes/mine`                | —                  | Recetas propias del usuario, orden alfabético             |
+| GET    | `/recipes/:id`                 | —                  | Detalle con ingredientes, pasos y grupos                  |
+| POST   | `/recipes`                     | ver ejemplo        | Crear receta. 409 si ya existe el título                  |
+| PATCH  | `/recipes/:id`                 | campos parciales   | Editar receta (solo el autor, 403 si no)                  |
+| DELETE | `/recipes/:id`                 | —                  | Eliminar receta (solo el autor). 204                      |
+| POST   | `/recipes/:id/groups`          | `{ groupIds: [] }` | Asociar receta a grupos                                   |
+| DELETE | `/recipes/:id/groups/:groupId` | —                  | Desasociar de un grupo (receta se conserva)               |
+
+**Ejemplo de creación de receta:**
+
+```json
+{
+  "title": "Pasta Carbonara",
+  "description": "Receta italiana clásica",
+  "ingredients": [
+    { "name": "Pasta", "quantity": "500", "unit": "g", "order": 0 },
+    { "name": "Huevos", "quantity": "3", "order": 1 }
+  ],
+  "steps": [
+    { "description": "Hervir la pasta", "order": 0 },
+    { "description": "Mezclar huevos con queso", "order": 1 }
+  ],
+  "groupIds": ["uuid-del-grupo"]
+}
+```
+
+### Grupos (requieren JWT)
+
+| Método | Ruta                         | Body                      | Descripción                                                |
+| ------ | ---------------------------- | ------------------------- | ---------------------------------------------------------- |
+| GET    | `/groups`                    | —                         | Grupos del usuario con conteo de recetas, orden alfabético |
+| GET    | `/groups/:id`                | —                         | Detalle del grupo con todas sus recetas                    |
+| GET    | `/groups/:id/confirm-delete` | —                         | Preview: recetas que se eliminarán con el grupo            |
+| POST   | `/groups`                    | `{ name, description? }`  | Crear grupo. 409 si el nombre ya existe                    |
+| PATCH  | `/groups/:id`                | `{ name?, description? }` | Editar grupo                                               |
+| DELETE | `/groups/:id`                | —                         | Eliminar grupo y todas sus recetas. 204                    |
+
+**Flujo de eliminación de grupo:**
+
+1. `GET /groups/:id/confirm-delete` → retorna la lista de recetas que se borrarán
+2. El frontend muestra un diálogo de confirmación al usuario
+3. Si confirma → `DELETE /groups/:id` elimina el grupo y las recetas
+
+**Respuesta de confirm-delete:**
+
+```json
+{
+  "group": { "id": "...", "name": "Italianas" },
+  "recipesToDelete": [
+    { "id": "...", "title": "Pasta Carbonara" },
+    { "id": "...", "title": "Pizza Margherita" }
+  ]
+}
+```
+
+---
+
+## Seguridad
+
+- **JWT dual**: Access token (15 min) + Refresh token (7 días) con rotación automática
+- **Hashing**: Contraseñas con bcrypt (factor 10), refresh token con `bcrypt(sha256(token))`
+- **Guard global**: Todas las rutas protegidas por defecto, excepto las marcadas con `@Public()`
+- **Autorización**: Verificación de propiedad en operaciones de escritura (403 si no es el dueño)
+- **Rate limiting**: 10 peticiones por minuto por IP
+- **Validación**: Pipes globales con `whitelist: true` para rechazar campos no declarados
+- **CORS**: Configurable por variable de entorno
+
+---
+
+## Códigos de Error
+
+| Código | Significado                                                |
+| ------ | ---------------------------------------------------------- |
+| 200    | Operación exitosa                                          |
+| 201    | Recurso creado                                             |
+| 204    | Eliminación exitosa (sin body)                             |
+| 400    | Validación fallida (campos faltantes o formato incorrecto) |
+| 401    | Token inválido o expirado                                  |
+| 403    | Sin permisos (no es dueño del recurso)                     |
+| 404    | Recurso no encontrado                                      |
+| 409    | Conflicto (email, título o nombre duplicado)               |
+| 429    | Rate limit excedido                                        |
+
+---
+
+## Cumplimiento de Requisitos del Enunciado
+
+| #   | Requisito                                                       | Estado   | Implementación                                                                  |
+| --- | --------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| 1   | CRUD de Usuario (registro, login, editar perfil, borrar cuenta) | Cumplido | `/auth/*` + `/users/me`                                                         |
+| 2   | CRUD de Recetas con ingredientes, pasos e información relevante | Cumplido | `/recipes/*` con creación anidada de ingredientes y pasos                       |
+| 3   | Presentar ordenados de forma alfabética                         | Cumplido | `orderBy` en todos los listados a nivel de base de datos                        |
+| 4   | No permitir recetas con el mismo nombre/título                  | Cumplido | Constraint `@@unique([userId, title])` + error 409                              |
+| 5   | CRUD de Grupos con recetas asociadas                            | Cumplido | `/groups/*` con relación N:M vía tabla pivote                                   |
+| 6   | Al borrar grupo, informar que se borrarán las recetas           | Cumplido | `GET /groups/:id/confirm-delete` + `DELETE /groups/:id` elimina grupo y recetas |
+| 7   | Al quitar receta de grupo, simplemente queda fuera              | Cumplido | `DELETE /recipes/:id/groups/:groupId` solo elimina la asociación                |
+| 8   | Una receta puede estar en múltiples grupos                      | Cumplido | Tabla pivote `recipe_groups` (relación N:M)                                     |
+| 9   | Vista de recetas personales y recetas en general                | Cumplido | `/recipes/mine` (propias) + `/recipes` (todas)                                  |
+
+---
+
+## Comandos de Desarrollo
+
+```bash
+# Base de datos
+docker-compose up -d          # Levantar PostgreSQL
+docker-compose down            # Detener
+docker-compose down -v         # Detener y borrar datos
+
+# Migraciones
+npx prisma migrate deploy      # Aplicar migraciones
+npx prisma migrate dev         # Crear nueva migración
+npx prisma studio              # GUI de base de datos
+
+# Servidor
+npm run start:dev              # Desarrollo con hot-reload
+npm run build                  # Compilar para producción
+npm run start:migrate:prod     # Producción (migraciones + servidor)
+
+# Tests
+npm run test                   # Tests unitarios
+npm run test:e2e               # Tests end-to-end
+```
+
+---
+
+## Despliegue
+
+El backend está desplegado en **Railway** con un Dockerfile multi-stage (3 etapas):
+
+1. **deps** — Instala dependencias de producción
+2. **build** — Compila TypeScript y genera el cliente Prisma
+3. **production** — Imagen final liviana con usuario no-root
+
+Al iniciar, ejecuta automáticamente `prisma migrate deploy` antes de levantar el servidor.

@@ -110,13 +110,49 @@ export class GroupsService {
     }
   }
 
-  async remove(id: string, userId: string) {
+  async findRecipesToDelete(id: string, userId: string) {
     const group = await this.prisma.group.findFirst({
       where: { id, userId },
+      include: {
+        recipes: {
+          include: {
+            recipe: {
+              select: { id: true, title: true },
+            },
+          },
+        },
+      },
     });
 
     if (!group) throw new NotFoundException('Group not found');
 
-    await this.prisma.group.delete({ where: { id } });
+    return {
+      group: { id: group.id, name: group.name },
+      recipesToDelete: group.recipes.map((rg) => rg.recipe),
+    };
+  }
+
+  async remove(id: string, userId: string) {
+    const group = await this.prisma.group.findFirst({
+      where: { id, userId },
+      include: {
+        recipes: {
+          select: { recipeId: true },
+        },
+      },
+    });
+
+    if (!group) throw new NotFoundException('Group not found');
+
+    const recipeIds = group.recipes.map((rg) => rg.recipeId);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (recipeIds.length > 0) {
+        await tx.recipe.deleteMany({
+          where: { id: { in: recipeIds } },
+        });
+      }
+      await tx.group.delete({ where: { id } });
+    });
   }
 }
